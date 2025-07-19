@@ -6,11 +6,11 @@ import {
   StyleSheet,
   SafeAreaView,
   ActivityIndicator,
+  ScrollView,
 } from "react-native";
 import axios from "axios";
 import { Buffer } from "buffer";
 
-// Make Buffer available globally (outside component)
 global.Buffer = Buffer;
 
 // 🔐 Spotify Credentials
@@ -21,8 +21,8 @@ export default function App() {
   const [track, setTrack] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
+  const [moodTracks, setMoodTracks] = useState([]);
 
-  // 🔑 Get Access Token from Spotify
   const getAccessToken = async () => {
     try {
       const res = await axios.post(
@@ -43,10 +43,11 @@ export default function App() {
     }
   };
 
-  // 🎲 Get a Random Song from New Releases
   const getRandomTrack = async () => {
     setLoading(true);
     setErrorMsg(null);
+    setTrack(null);
+    setMoodTracks([]);
     try {
       const token = await getAccessToken();
 
@@ -59,37 +60,134 @@ export default function App() {
 
       const albums = res.data.albums.items;
       const randomAlbum = albums[Math.floor(Math.random() * albums.length)];
-      const trackName = randomAlbum.name;
-      const artistName = randomAlbum.artists[0].name;
 
-      setTrack({ name: trackName, artist: artistName });
+      const albumTracksRes = await axios.get(
+        `https://api.spotify.com/v1/albums/${randomAlbum.id}/tracks?limit=5`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      const trackData =
+        albumTracksRes.data.items[
+          Math.floor(Math.random() * albumTracksRes.data.items.length)
+        ];
+
+      setTrack({
+        name: trackData.name,
+        artist: trackData.artists[0].name,
+      });
     } catch (err) {
       console.error("❌ Error fetching track:", err);
       setErrorMsg("Oops! Couldn't load a track. Try again.");
-      setTrack(null);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
+  };
+
+  const handleMoodPress = async (mood) => {
+    setLoading(true);
+    setTrack(null);
+    setErrorMsg(null);
+    setMoodTracks([]);
+
+    try {
+      const token = await getAccessToken();
+
+      const response = await fetch(
+        `https://api.spotify.com/v1/search?q=${encodeURIComponent(
+          mood
+        )}&type=playlist&limit=1`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      const playlist = data?.playlists?.items?.[0];
+      if (!playlist || !playlist.id) {
+        throw new Error(`No playlists found for mood "${mood}"`);
+      }
+
+      const playlistRes = await fetch(
+        `https://api.spotify.com/v1/playlists/${playlist.id}/tracks?limit=5`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const playlistData = await playlistRes.json();
+
+      const tracks = playlistData.items
+        .map((item) => item.track)
+        .filter((track) => track && track.name && track.artists?.[0]);
+
+      if (tracks.length === 0) {
+        throw new Error("No tracks found in the playlist.");
+      }
+
+      setMoodTracks(tracks);
+    } catch (error) {
+      console.error("Error fetching mood playlist:", error);
+      setErrorMsg("Couldn't load a mood playlist. Try a different vibe!");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>🎧 FreshFlow</Text>
-      <Text style={styles.subtitle}>Your vibe. Refreshed daily.</Text>
+      <ScrollView
+        contentContainerStyle={{ alignItems: "center", paddingBottom: 40 }}
+      >
+        <Text style={styles.title}>🎧 FreshFlow</Text>
+        <Text style={styles.subtitle}>Your vibe. Refreshed daily.</Text>
 
-      <TouchableOpacity style={styles.button} onPress={getRandomTrack}>
-        <Text style={styles.buttonText}>🎲 Roll Today’s Song</Text>
-      </TouchableOpacity>
-
-      {loading && <ActivityIndicator size="large" color="#22D3EE" />}
-
-      {errorMsg && <Text style={styles.error}>{errorMsg}</Text>}
-
-      {track && !errorMsg && (
-        <View style={styles.card}>
-          <Text style={styles.songTitle}>{track.name}</Text>
-          <Text style={styles.songArtist}>by {track.artist}</Text>
+        <View style={styles.moodButtons}>
+          {["Chill", "Hype", "Focus", "Sad", "Happy"].map((mood) => (
+            <TouchableOpacity
+              key={mood}
+              style={styles.moodButton}
+              onPress={() => handleMoodPress(mood)}
+            >
+              <Text style={{ color: "white", fontWeight: "bold" }}>{mood}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
-      )}
+
+        <TouchableOpacity style={styles.button} onPress={getRandomTrack}>
+          <Text style={styles.buttonText}>🎲 Roll Today’s Song</Text>
+        </TouchableOpacity>
+
+        {loading && <ActivityIndicator size="large" color="#22D3EE" />}
+
+        {errorMsg && <Text style={styles.error}>{errorMsg}</Text>}
+
+        {track && (
+          <View style={styles.card}>
+            <Text style={styles.songTitle}>{track.name}</Text>
+            <Text style={styles.songArtist}>by {track.artist}</Text>
+          </View>
+        )}
+
+        {moodTracks.length > 0 && (
+          <View style={styles.moodListContainer}>
+            <Text style={styles.moodListTitle}>🎵 Tracks for your mood:</Text>
+            {moodTracks.map((track, index) => (
+              <View key={index} style={styles.moodTrackCard}>
+                <Text style={styles.trackText}>
+                  {track.name} — {track.artists[0].name}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -98,8 +196,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#0F172A",
-    alignItems: "center",
-    justifyContent: "center",
     padding: 20,
   },
   title: {
@@ -107,11 +203,12 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#22D3EE",
     marginBottom: 10,
+    textAlign: "center",
   },
   subtitle: {
     fontSize: 16,
     color: "#CBD5E1",
-    marginBottom: 30,
+    marginBottom: 20,
     textAlign: "center",
   },
   button: {
@@ -126,13 +223,26 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
   },
+  moodButtons: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    marginBottom: 20,
+  },
+  moodButton: {
+    backgroundColor: "#1DB954",
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    margin: 6,
+  },
   card: {
     backgroundColor: "#1E293B",
     padding: 20,
     borderRadius: 16,
-    width: "100%",
     alignItems: "center",
     marginTop: 20,
+    width: "100%",
   },
   songTitle: {
     fontSize: 20,
@@ -150,6 +260,28 @@ const styles = StyleSheet.create({
     color: "#F87171",
     marginTop: 20,
     fontSize: 14,
+    textAlign: "center",
+  },
+  moodListContainer: {
+    marginTop: 30,
+    width: "100%",
+  },
+  moodListTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#fff",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  moodTrackCard: {
+    backgroundColor: "#1E293B",
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+  trackText: {
+    fontSize: 16,
+    color: "#E2E8F0",
     textAlign: "center",
   },
 });
