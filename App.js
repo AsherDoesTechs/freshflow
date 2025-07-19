@@ -7,9 +7,11 @@ import {
   SafeAreaView,
   ActivityIndicator,
   ScrollView,
+  Image,
 } from "react-native";
 import axios from "axios";
 import { Buffer } from "buffer";
+import { Audio } from "expo-av";
 
 global.Buffer = Buffer;
 
@@ -22,6 +24,29 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [moodTracks, setMoodTracks] = useState([]);
+  const [sound, setSound] = useState(null);
+
+  const playPreview = async (url) => {
+    try {
+      if (sound) {
+        await sound.unloadAsync();
+        setSound(null);
+      }
+
+      const { sound: newSound } = await Audio.Sound.createAsync({ uri: url });
+      setSound(newSound);
+      await newSound.playAsync();
+
+      newSound.setOnPlaybackStatusUpdate((status) => {
+        if (status.didJustFinish) {
+          newSound.unloadAsync();
+          setSound(null);
+        }
+      });
+    } catch (e) {
+      console.error("Error playing preview:", e);
+    }
+  };
 
   const getAccessToken = async () => {
     try {
@@ -38,7 +63,7 @@ export default function App() {
         }
       );
       return res.data.access_token;
-    } catch (error) {
+    } catch {
       throw new Error("Failed to get Spotify token.");
     }
   };
@@ -50,7 +75,6 @@ export default function App() {
     setMoodTracks([]);
     try {
       const token = await getAccessToken();
-
       const res = await axios.get(
         "https://api.spotify.com/v1/browse/new-releases?limit=20",
         {
@@ -73,9 +97,20 @@ export default function App() {
           Math.floor(Math.random() * albumTracksRes.data.items.length)
         ];
 
+      const fullTrackRes = await axios.get(
+        `https://api.spotify.com/v1/tracks/${trackData.id}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      const fullTrack = fullTrackRes.data;
+
       setTrack({
-        name: trackData.name,
-        artist: trackData.artists[0].name,
+        name: fullTrack.name,
+        artist: fullTrack.artists[0].name,
+        previewUrl: fullTrack.preview_url,
+        albumArt: fullTrack.album?.images?.[0]?.url,
       });
     } catch (err) {
       console.error("❌ Error fetching track:", err);
@@ -106,8 +141,8 @@ export default function App() {
       );
 
       const data = await response.json();
-
       const playlist = data?.playlists?.items?.[0];
+
       if (!playlist || !playlist.id) {
         throw new Error(`No playlists found for mood "${mood}"`);
       }
@@ -122,12 +157,11 @@ export default function App() {
       );
 
       const playlistData = await playlistRes.json();
-
       const tracks = playlistData.items
         .map((item) => item.track)
-        .filter((track) => track && track.name && track.artists?.[0]);
+        .filter((t) => t && t.name && t.artists?.length > 0);
 
-      if (tracks.length === 0) {
+      if (!tracks.length) {
         throw new Error("No tracks found in the playlist.");
       }
 
@@ -165,13 +199,31 @@ export default function App() {
         </TouchableOpacity>
 
         {loading && <ActivityIndicator size="large" color="#22D3EE" />}
-
         {errorMsg && <Text style={styles.error}>{errorMsg}</Text>}
 
         {track && (
           <View style={styles.card}>
+            {track.albumArt && (
+              <Image source={{ uri: track.albumArt }} style={styles.albumArt} />
+            )}
             <Text style={styles.songTitle}>{track.name}</Text>
             <Text style={styles.songArtist}>by {track.artist}</Text>
+
+            {track.previewUrl ? (
+              <TouchableOpacity
+                style={[
+                  styles.button,
+                  { marginTop: 15, backgroundColor: "#22D3EE" },
+                ]}
+                onPress={() => playPreview(track.previewUrl)}
+              >
+                <Text style={styles.buttonText}>▶️ Play Preview</Text>
+              </TouchableOpacity>
+            ) : (
+              <Text style={{ color: "gray", marginTop: 10 }}>
+                ❌ No Preview Available
+              </Text>
+            )}
           </View>
         )}
 
@@ -243,6 +295,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 20,
     width: "100%",
+  },
+  albumArt: {
+    width: 200,
+    height: 200,
+    borderRadius: 10,
+    marginBottom: 10,
   },
   songTitle: {
     fontSize: 20,
