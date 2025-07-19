@@ -1,40 +1,36 @@
-const clientId = "20096e5384b746c6b692757222a50836";
-const clientSecret = "e379ba2732854836bd543f7faf9547fb";
+import express from "express";
+import axios from "axios";
+import cors from "cors";
+import dotenv from "dotenv";
+dotenv.config();
 
-export async function getAccessToken() {
-  const encoded = btoa(`${clientId}:${clientSecret}`);
+const app = express();
+app.use(cors());
 
-  const res = await fetch("https://accounts.spotify.com/api/token", {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${encoded}`,
-      "Content-Type": `application/x-www-form-urlencoded`,
-    },
-    body: "grant_type=client_credentials",
-  });
+app.get("/token", async (req, res) => {
+  try {
+    const { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET } = process.env;
+    const response = await axios.post(
+      "https://accounts.spotify.com/api/token",
+      new URLSearchParams({ grant_type: "client_credentials" }).toString(),
+      {
+        headers: {
+          Authorization:
+            "Basic " +
+            Buffer.from(
+              `${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`
+            ).toString("base64"),
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      }
+    );
 
-  const data = await res.json();
-  return data.access_token;
-}
+    res.json(response.data);
+  } catch (err) {
+    res.status(500).json({ error: "Token fetch failed", details: err.message });
+  }
+});
 
-export async function getRandomTrack(token) {
-  const res = await fetch(
-    `https://api.spotify.com/v1/recommendations?seed_genres=lofi&limit=1`,
-    {
-      method: `GET`,
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    }
-  );
-
-  const data = await res.json();
-  const track = data.tracks[0];
-
-  return {
-    name: track.name,
-    artist: track.artist[0].name,
-    image: track.album.images[0].url,
-    url: track.external_urls.spotify,
-  };
-}
+app.listen(3001, () =>
+  console.log("🎵 Token server running on http://localhost:3001")
+);
