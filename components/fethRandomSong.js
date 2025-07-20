@@ -4,8 +4,8 @@ import { Buffer } from "buffer";
 // Needed for Spotify auth
 global.Buffer = Buffer;
 
-const SPOTIFY_CLIENT_ID = "YOUR_SPOTIFY_CLIENT_ID";
-const SPOTIFY_CLIENT_SECRET = "YOUR_SPOTIFY_CLIENT_SECRET";
+const SPOTIFY_CLIENT_ID = "20096e5384b746c6b692757222a50836";
+const SPOTIFY_CLIENT_SECRET = "e379ba2732854836bd543f7faf9547fb";
 
 export async function fetchRandomTrack() {
   try {
