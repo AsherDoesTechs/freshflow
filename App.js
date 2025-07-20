@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import {
   View,
   Text,
+  FlatList,
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
@@ -12,6 +13,7 @@ import {
 import axios from "axios";
 import { Buffer } from "buffer";
 import { Audio } from "expo-av";
+import SearchBar from "./components/SearchBar";
 
 global.Buffer = Buffer;
 
@@ -176,70 +178,83 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView
-        contentContainerStyle={{ alignItems: "center", paddingBottom: 40 }}
-      >
-        <Text style={styles.title}>🎧 FreshFlow</Text>
-        <Text style={styles.subtitle}>Your vibe. Refreshed daily.</Text>
+      <FlatList
+        data={moodTracks} // still required even if empty
+        keyExtractor={(item, index) => index.toString()}
+        ListHeaderComponent={
+          <View>
+            <SearchBar />
 
-        <View style={styles.moodButtons}>
-          {["Chill", "Hype", "Focus", "Sad", "Happy"].map((mood) => (
-            <TouchableOpacity
-              key={mood}
-              style={styles.moodButton}
-              onPress={() => handleMoodPress(mood)}
-            >
-              <Text style={{ color: "white", fontWeight: "bold" }}>{mood}</Text>
+            <Text style={styles.title}>🎧 FreshFlow</Text>
+            <Text style={styles.subtitle}>Your vibe. Refreshed daily.</Text>
+
+            <View style={styles.moodButtons}>
+              {["Chill", "Hype", "Focus", "Sad", "Happy"].map((mood) => (
+                <TouchableOpacity
+                  key={mood}
+                  style={styles.moodButton}
+                  onPress={() => handleMoodPress(mood)}
+                >
+                  <Text style={{ color: "white", fontWeight: "bold" }}>
+                    {mood}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TouchableOpacity style={styles.button} onPress={getRandomTrack}>
+              <Text style={styles.buttonText}>🎲 Roll Today’s Song</Text>
             </TouchableOpacity>
-          ))}
-        </View>
 
-        <TouchableOpacity style={styles.button} onPress={getRandomTrack}>
-          <Text style={styles.buttonText}>🎲 Roll Today’s Song</Text>
-        </TouchableOpacity>
+            {loading && <ActivityIndicator size="large" color="#22D3EE" />}
+            {errorMsg && <Text style={styles.error}>{errorMsg}</Text>}
 
-        {loading && <ActivityIndicator size="large" color="#22D3EE" />}
-        {errorMsg && <Text style={styles.error}>{errorMsg}</Text>}
+            {track && (
+              <View style={styles.card}>
+                {track.albumArt && (
+                  <Image
+                    source={{ uri: track.albumArt }}
+                    style={styles.albumArt}
+                  />
+                )}
+                <Text style={styles.songTitle}>{track.name}</Text>
+                <Text style={styles.songArtist}>by {track.artist}</Text>
 
-        {track && (
-          <View style={styles.card}>
-            {track.albumArt && (
-              <Image source={{ uri: track.albumArt }} style={styles.albumArt} />
+                {track.previewUrl ? (
+                  <TouchableOpacity
+                    style={[
+                      styles.button,
+                      { marginTop: 15, backgroundColor: "#22D3EE" },
+                    ]}
+                    onPress={() => playPreview(track.previewUrl)}
+                  >
+                    <Text style={styles.buttonText}>▶️ Play Preview</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={{ color: "gray", marginTop: 10 }}>
+                    ❌ No Preview Available
+                  </Text>
+                )}
+              </View>
             )}
-            <Text style={styles.songTitle}>{track.name}</Text>
-            <Text style={styles.songArtist}>by {track.artist}</Text>
 
-            {track.previewUrl ? (
-              <TouchableOpacity
-                style={[
-                  styles.button,
-                  { marginTop: 15, backgroundColor: "#22D3EE" },
-                ]}
-                onPress={() => playPreview(track.previewUrl)}
-              >
-                <Text style={styles.buttonText}>▶️ Play Preview</Text>
-              </TouchableOpacity>
-            ) : (
-              <Text style={{ color: "gray", marginTop: 10 }}>
-                ❌ No Preview Available
-              </Text>
-            )}
-          </View>
-        )}
-
-        {moodTracks.length > 0 && (
-          <View style={styles.moodListContainer}>
-            <Text style={styles.moodListTitle}>🎵 Tracks for your mood:</Text>
-            {moodTracks.map((track, index) => (
-              <View key={index} style={styles.moodTrackCard}>
-                <Text style={styles.trackText}>
-                  {track.name} — {track.artists[0].name}
+            {moodTracks.length > 0 && (
+              <View style={styles.moodListContainer}>
+                <Text style={styles.moodListTitle}>
+                  🎵 Tracks for your mood:
                 </Text>
               </View>
-            ))}
+            )}
+          </View>
+        }
+        renderItem={({ item }) => (
+          <View style={styles.moodTrackCard}>
+            <Text style={styles.trackText}>
+              {item.name} — {item.artists[0].name}
+            </Text>
           </View>
         )}
-      </ScrollView>
+      />
     </SafeAreaView>
   );
 }
